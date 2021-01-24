@@ -2,7 +2,7 @@
 
 ## About
 
-This role is a fork from [devgateway's original pacemaker role](https://github.com/devgateway/ansible-role-pacemaker). The main goal is to make the role a bit more easier to handle by introducting a couple of quality-life-changes. The original role relied on the user to manually include tasks and provide them with the required variables. Now these tasks are automatically called if the variable is defined.
+This role is a fork from [devgateway's original pacemaker role](https://github.com/devgateway/ansible-role-pacemaker). The main goal is to make the role a bit more easier to handle by introducing a couple of quality-life-changes. The original role relied on the user to manually include tasks and provide them with the required variables. Now these tasks are automatically called if the required variable is defined.
 
 ## Introduction
 
