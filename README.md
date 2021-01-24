@@ -121,10 +121,10 @@ pcmk_constraints:
 
 ``` yaml
     - name: Configure HAPROXY cluster
-      hosts: lb01, lb02
+      hosts: lb01,lb02
       become: true
       roles:
-        - robinoph.pacemaker
+        - ansible-role-pacemaker
       vars:
         pcmk_password: secret
         pcmk_cluster_nodes:
