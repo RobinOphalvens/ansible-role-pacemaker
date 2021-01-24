@@ -24,7 +24,7 @@ This role has been tested for Centos 7. Binary compatible clones such as RHEL an
 | Variable                                  | Default                        | Comment                                                                                                |
 |:------------------------------------------|:-------------------------------|:-------------------------------------------------------------------------------------------------------|
 | `pcmk_cluster_name`                       | `hacluster`                    | The name of the cluster                                                                                |
-| `pcmk_password`                           | `ansible_machine_id | to_uuid` | The password used to authenticate with the cluster nodes. See note below regarding the default         |
+| `pcmk_password`                           | `ansible_machine_id \| to_uuid`| The password used to authenticate with the cluster nodes. See note below regarding the default         |
 | `pcmk_user`                               | `hacluster`                    | The system user to authenticate PCS nodes with.                                                        |
 | `pcmk_cluster_nodes`                      |                                | **[REQUIRED]** A list of either the hostnames or the IP's of the cluster nodes                         |
 | `pcmk_cluster_options`                    |                                | Dictionary with [cluster-wide options](https://clusterlabs.org/pacemaker/doc/en-US/Pacemaker/1.1/html/Pacemaker_Explained/s-cluster-options.html) (optional). |
