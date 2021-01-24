@@ -1,4 +1,5 @@
 ---
+pacemaker_package: 'pcs'
 pcmk_cluster_name: hacluster
 pcmk_user: hacluster
 pcmk_pretty_xml: false

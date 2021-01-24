@@ -65,7 +65,7 @@
   loop:
     - corosync
     - pacemaker
-  
+
 - include_tasks: pre.yml
 
 - name: Configure cluster properties
