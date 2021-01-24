@@ -1,5 +1,4 @@
 ---
-- include_tasks: pre.yml
 
 - name: Configure simple resource
   include_tasks: primitive.yml
@@ -8,4 +7,3 @@
     primitive: "{{ pcmk_resource }}"
   run_once: true
 
-- include_tasks: post.yml
