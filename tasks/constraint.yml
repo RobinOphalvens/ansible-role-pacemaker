@@ -1,6 +1,6 @@
 ---
-
 - name: Create {{ pcmk_constraint.type }} pcmk_constraint
+  run_once: true
   xml:
     path: "{{ pcmk_config.path }}"
     xpath: |-
@@ -19,6 +19,7 @@
   check_mode: false
 
 - name: Set pcmk_constraint properties
+  run_once: true
   xml:
     path: "{{ pcmk_config.path }}"
     xpath: |-
@@ -48,4 +49,3 @@
     loop_var: attr_name
     label: "{{ '{%s: %s}' | format(attr_name, pcmk_constraint[attr_name]) }}"
   check_mode: false
-
