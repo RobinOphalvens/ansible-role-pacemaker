@@ -1,4 +1,10 @@
 ---
+
+- name: Install Pacemaker Configuration System package
+  yum:
+    name: "{{ pacemaker_package }}"
+    state: installed
+
 - name: Enable and start PCS daemon
   service:
     name: pcsd
@@ -17,21 +23,29 @@
     system: true
     password: "{{ pcmk_password | password_hash('sha512', ansible_hostname) }}"
 
+- name: Print variable ansible batch
+  debug:
+    msg: " {{ pcmk_cluster_nodes | join(' ') }}"
+
 - name: Authenticate all nodes
   command: >
     pcs cluster auth
-    {{ ansible_play_batch | join(' ') }}
+    {{ pcmk_cluster_nodes | join(' ') }}
     -u {{ pcmk_user }}
     -p {{ pcmk_password | quote }}
   run_once: true
   args:
     creates: /var/lib/pcsd/tokens
 
+- name: Print variable cluster
+  debug:
+    msg: "{{ pcmk_cluster_name | quote }}"
+
 - name: Setup message bus
   run_once: true
   command: >
     pcs cluster setup --name {{ pcmk_cluster_name | quote }}
-    {{  ansible_play_batch | join(' ') }}
+    {{  pcmk_cluster_nodes | join(' ') }}
     {%  for key, value in pcmk_votequorum.items() %}
     {%    if value is sameas(true) %}
     {%      set value = 1 %}
@@ -51,7 +65,7 @@
   loop:
     - corosync
     - pacemaker
-
+  
 - include_tasks: pre.yml
 
 - name: Configure cluster properties
@@ -75,5 +89,33 @@
     loop_var: nvpair
     label: "{{ '{' ~ nvpair.key ~ ': ' ~ nvpair.value ~ '}' }}"
   run_once: true
+
+- name: Configure cluster resources
+  include_tasks: resource.yml
+  loop_control:
+    loop_var: pcmk_resource
+  loop: "{{ pcmk_resources }}"
+  when: pcmk_resources is defined
+
+- name: Configure advanced cluster resources
+  include_tasks: advances-resource.yml
+  loop_control:
+    loop_var: pcmk_resource
+  loop: "{{ pcmk_advanced_resources }}"
+  when: pcmk_advanced_resources is defined
+
+- name: Configure resource groups
+  include_tasks: group.yml
+  loop_control:
+    loop_var: pcmk_group
+  loop: "{{ pcmk_groups }}"
+  when: pcmk_groups is defined
+
+- name: Configure cluster constraints
+  include_tasks: constraint.yml
+  loop_control:
+    loop_var: pcmk_constraint
+  loop: "{{ pcmk_constraints }}"
+  when: pcmk_constraints is defined
 
 - include_tasks: post.yml
