@@ -1,5 +1,11 @@
 # Pacemaker role for Ansible
 
+## About
+
+This role is a fork from [devgateway's original pacemaker role](https://github.com/devgateway/ansible-role-pacemaker). The main goal is to make the role a bit more easier to handle by introducting a couple of quality-life-changes. The original role relied on the user to manually include tasks and provide them with the required variables. Now these tasks are automatically called if the variable is defined.
+
+## Introduction
+
 This role configures Pacemaker cluster by dumping the configuration (CIB), adjusting the XML, and
 reloading it. The role is idempotent, and supports check mode.
 
@@ -9,59 +15,34 @@ to focus on specific resources, without interfering with the rest.
 
 ## Requirements
 
-This role has been written for and tested in Scientific Linux 7. It might also work in other
-distros, please share your experience.
+No specific role dependencies. Although using hostnames or FQDNs with `pcmk_cluster_nodes` requires DNS to be configured which this role does not handle.  
 
-## Tasks
+This role has been tested for Centos 7. Binary compatible clones such as RHEL and Scientific Linux should therefore also work.
 
-Use `tasks_from` Ansible directive to specify what you want to configure.
+## Role variables
 
-Boolean values in properties (parsed by Pacemaker itself) don't have to be quoted. However,
-resource agents may expect Boolean-like arguments as integers, strings, etc. Such values **must**
-be quoted.
+| Variable                                  | Default                        | Comment                                                                                                |
+|:------------------------------------------|:-------------------------------|:-------------------------------------------------------------------------------------------------------|
+| `pcmk_cluster_name`                       | `hacluster`                    | The name of the cluster                                                                                |
+| `pcmk_password`                           | `ansible_machine_id | to_uuid` | The password used to authenticate with the cluster nodes. See note below regarding the default         |
+| `pcmk_user`                               | `hacluster`                    | The system user to authenticate PCS nodes with.                                                        |
+| `pcmk_cluster_nodes`                      |                                | **[REQUIRED]** A list of either the hostnames or the IP's of the cluster nodes                         |
+| `pcmk_cluster_options`                    |                                | Dictionary with [cluster-wide options](https://clusterlabs.org/pacemaker/doc/en-US/Pacemaker/1.1/html/Pacemaker_Explained/s-cluster-options.html) (optional). |
+| `pcmk_votequorum`                         |                                | Dictionary with votequorum options (optional). See `votequorum(5)`. Boolean values accepted.           |
+| `pcmk_resource_defaults`                  |                                | Dictionary of resource defaults (optional).
+| `pcmk_resources`                          |                                | A dictionary with the resources that cluster should manage.                                            |
+| `pcmk_advanced_resources`                 |                                | A dictionary with advanced resource types that the cluster should manage.                              |
+| `pcmk_constraints`                        |                                | A dictionary with pacemaker constraints
 
-### `tasks_from: main`
+## `pcmk_password`
 
-Set up nodes, configure cluster properties, and resource defaults.
+The plaintext password for the cluster user (optional). If omitted, will be derived from ansible_machine_id of the first host in the play batch. This password is only used in the initial authentication of the nodes.
 
-#### `pcmk_cluster_name`
+## A note regarding `pcmk_cluster_nodes`
 
-Name of the cluster (optional).
+The upstream role uses the `ansible_play_batch` variable to populate the `pcs cluster auth` and `pcs cluster setup` commands. This however has the potential to break most setups that use the Ansible provisioner within Vagrant. While manually specifying the nodes is less dynamic, it provides a more fool-proof way that the command will succeed.
 
-Default: `hacluster`.
-
-#### `pcmk_password`
-
-The plaintext password for the cluster user (optional). If omitted, will be derived from
-`ansible_machine_id` of the first host in the play batch. This password is only used in the initial
-authentication of the nodes.
-
-Default: `ansible_machine_id | to_uuid`
-
-#### `pcmk_user`
-
-The system user to authenticate PCS nodes with (optional). PCS will authenticate all nodes with
-each other.
-
-Default: `hacluster`
-
-#### `pcmk_cluster_options`
-
-Dictionary with [cluster-wide options](https://clusterlabs.org/pacemaker/doc/en-US/Pacemaker/1.1/html/Pacemaker_Explained/s-cluster-options.html) (optional).
-
-#### `pcmk_votequorum`
-
-Dictionary with votequorum options (optional). See `votequorum(5)`. Boolean values accepted.
-
-#### `pcmk_resource_defaults`
-
-Dictionary of resource defaults (optional).
-
-### `tasks_from: resource`
-
-Configure a simple resource.
-
-#### `pcmk_resource`
+## Pacemaker resources
 
 Dictionary describing a simple (*primitive*) resource. Contains the following members:
 
@@ -74,23 +55,42 @@ Dictionary describing a simple (*primitive*) resource. Contains the following me
   `interval` members, and optional arbitrary members;
 * `meta`: optional dictionary of meta-attributes.
 
-### `tasks_from: group`
+Example:
 
-Configure a resource group.
+```yaml
+pcmk_resources:
+  - id: virtual-ip
+    class: ocf
+    provider: heartbeat
+    type: IPaddr2
+    options:
+      ip: 192.168.100.100
+      cidr: 24
+    meta:
+      migration-threshold: 0
+    op:
+      - name: monitor
+        timeout: 60s
+        interval: 10s
+        on-fail: restart
+  - id: haproxy
+    class: service
+    type: haproxy
+```
 
-#### `pcmk_group`
+## Resource groups
+
+As its name suggests, resources can be grouped into a collective resource.  
 
 Dictionary with two members:
 
 * `id` is the group identifier
 * `resources` is a dictionary where keys are resource IDs, and values have the same format as
-  `pcmk_resource` (except for `id` of the resources being optional).
+  `pcmk_resources` (except for `id` of the resources being optional).
 
-### `tasks_from: constraint`
+## Constraints
 
-Configure a constraint.
-
-##### `pcmk_constraint`
+Configure a constraint.  
 
 Dictionary defining a single constraint. The following members are required:
 
@@ -105,286 +105,66 @@ Depending on the value of `type`, the following members are also required:
 
 The dictionary may contain other members, e.g. `symmetrical`.
 
-## Example playbooks
+Example:
 
-### Active-active chrooted BIND DNS server
+``` yaml
+pcmk_constraints:
+  - type: colocation
+    rsc: virtual-ip
+    with-rsc: haproxy
+    score: INFINITY
+```
 
-    ---
-    - name: Configure DNS cluster
-      hosts: dns-servers
-      tasks:
-    
-        - name: Set up cluster
-          include_role:
-            name: devgateway.pacemaker
-          vars:
-            pcmk_password: hunter2
-            pcmk_cluster_name: named
-            pcmk_cluster_options:
-              stonith-enabled: false
-    
-        - name: Configure IP address resource
-          include_role:
-            name: devgateway.pacemaker
-            tasks_from: resource
-          vars:
-            pcmk_resource:
-              id: dns-ip
-              class: ocf
-              provider: heartbeat
-              type: IPaddr2
-              options:
-                ip: 10.0.0.1
-                cidr_netmask: 8
-              op:
-                - name: monitor
-                  interval: 5s
-    
-        - name: Configure cloned BIND resource
-          include_role:
-            name: devgateway.pacemaker
-            tasks_from: advanced-resource
-          vars:
-            pcmk_resource:
-              type: clone
-              id: dns-clone
-              resources:
-                named:
-                  class: service
-                  type: named-chroot
-                  op:
-                    - name: monitor
-                      interval: 5s
-    
-        - name: Set up constraints
-          include_role:
-            name: devgateway.pacemaker
-            tasks_from: constraint
-          vars:
-            pcmk_constraint:
-              type: order
-              first: dns-ip
-              then: dns-clone
+## Example playbook
 
-### Active-active Squid proxy
+### Two Haproxy loadbalancers in a cluster
 
-    ---
-    - name: Configure Squid cluster
-      hosts: proxy-servers
-      tasks:
-    
-        - name: Set up cluster
-          include_role:
-            name: devgateway.pacemaker
-          vars:
-            pcmk_password: hunter2
-            pcmk_cluster_name: squid
-            pcmk_cluster_options:
-              stonith-enabled: false
-    
-        - name: Configure IP address resource
-          include_role:
-            name: devgateway.pacemaker
-            tasks_from: resource
-          vars:
-            pcmk_resource:
-              id: squid-ip
-              class: ocf
-              provider: heartbeat
-              type: IPaddr2
-              options:
-                ip: 192.168.0.200
-                cidr_netmask: 24
-              op:
-                - name: monitor
-                  interval: 5s
-    
-        - name: Configure cloned BIND resource
-          include_role:
-            name: devgateway.pacemaker
-            tasks_from: advanced-resource
-          vars:
-            pcmk_resource:
-              id: squid
-                type: clone
-                resources:
-                  squid-service:
-                    class: service
-                    type: squid
-                    op:
-                      - name: monitor
-                        interval: 5s
-    
-        - name: Set up constraints
-          include_role:
-            name: devgateway.pacemaker
-            tasks_from: constraint
-          vars:
-            pcmk_constraint:
-              type: order
-              first: squid-ip
-              then: squid
+``` yaml
+    - name: Configure HAPROXY cluster
+      hosts: lb01, lb02
+      become: true
+      roles:
+        - robinoph.pacemaker
+      vars:
+        pcmk_password: secret
+        pcmk_cluster_nodes:
+          - 192.168.100.7
+          - 192.168.100.8
+        pcmk_cluster_name: loadbalancer
+        pcmk_cluster_options:
+          stonith-enabled: false
+        pcmk_resources:
+          - id: virtual-ip
+            class: ocf
+            provider: heartbeat
+            type: IPaddr2
+            options:
+              ip: 192.168.100.100
+              cidr: 24
+            meta:
+              migration-threshold: 0
+            op:
+              - name: monitor
+                timeout: 60s
+                interval: 10s
+                on-fail: restart
+          - id: haproxy
+            class: service
+            type: haproxy
+        pcmk_constraints:
+          - type: colocation
+            rsc: virtual-ip
+            with-rsc: haproxy
+            score: INFINITY
+```
 
-### Nginx, web application, and master-slave Postgres
+Other playbook examples, inspired by [Development Gateway](https://github.com/devgateway) can be found [here](examples.md)
 
-The cluster runs two Postgres nodes with synchronous replication. Wherever master is, a virtual IP
-address is running, where NAT is pointing at. Nginx and the webapp are running at the same node, but
-not the other, in order to save resources. Based on [the example from Clusterlabs
-wiki](https://wiki.clusterlabs.org/wiki/PgSQL_Replicated_Cluster).
-
-    ---
-    - hosts:
-        - alpha
-        - bravo
-      tasks:
-    
-        - name: Set up Pacemaker with Postgres master/slave
-          include_role:
-            name: devgateway.pacemaker
-          vars:
-            pcmk_pretty_xml: true
-            pcmk_cluster_name: example
-            pcmk_password: hunter2
-            pcmk_cluster_options:
-              no-quorum-policy: ignore
-              stonith-enabled: false
-            pcmk_resource_defaults:
-              resource-stickiness: INFINITY
-              migration-threshold: 1
-    
-        - name: Configure simple resources
-          include_role:
-            name: devgateway.pacemaker
-            tasks_from: resource
-          loop_control:
-            loop_var: pcmk_resource
-          loop:
-            - id: coolapp
-              class: service
-              type: coolapp
-            - id: nginx
-              class: service
-              type: nginx
-            - id: virtual-ip
-              class: ocf
-              provider: heartbeat
-              type: IPaddr2
-              options:
-                ip: 10.0.0.23
-              meta:
-                migration-threshold: 0
-              op:
-                - name: start
-                  timeout: 60s
-                  interval: 0s
-                  on-fail: restart
-                - name: monitor
-                  timeout: 60s
-                  interval: 10s
-                  on-fail: restart
-                - name: stop
-                  timeout: 60s
-                  interval: 0s
-                  on-fail: restart
-    
-        - name: Configure master-slave Postgres
-          include_role:
-            name: devgateway.pacemaker
-            tasks_from: advanced-resource
-          vars:
-            pcmk_resource:
-              id: postgres
-              type: master
-              meta:
-                master-max: 1
-                master-node-max: 1
-                clone-max: 2
-                clone-node-max: 1
-                notify: true
-              resources:
-                postgres-replica-set:
-                  class: ocf
-                  provider: heartbeat
-                  type: pgsql
-                  options:
-                    pgctl: /usr/pgsql-9.4/bin/pg_ctl
-                    psql: /usr/pgsql-9.4/bin/psql
-                    pgdata: /var/lib/pgsql/9.4/data
-                    rep_mode: sync
-                    node_list: "{{ ansible_play_batch | join(' ') }}"
-                    restore_command: cp /var/lib/pgsql/9.4/archive/%f %p
-                    master_ip: 10.0.0.23
-                    restart_on_promote: "true"
-                    repuser: replication
-                  op:
-                    - name: start
-                      timeout: 60s
-                      interval: 0s
-                      on-fail: restart
-                    - name: monitor
-                      timeout: 60s
-                      interval: 4s
-                      on-fail: restart
-                    - name: monitor
-                      timeout: 60s
-                      interval: 3s
-                      on-fail: restart
-                      role: Master
-                    - name: promote
-                      timeout: 60s
-                      interval: 0s
-                      on-fail: restart
-                    - name: demote
-                      timeout: 60s
-                      interval: 0s
-                      on-fail: stop
-                    - name: stop
-                      timeout: 60s
-                      interval: 0s
-                      on-fail: block
-                    - name: notify
-                      timeout: 60s
-                      interval: 0s
-    
-        - name: Set up constraints
-          include_role:
-            name: devgateway.pacemaker
-            tasks_from: constraint
-          loop_control:
-            loop_var: pcmk_constraint
-          loop:
-            - type: colocation
-              rsc: virtual-ip
-              with-rsc: postgres
-              with-rsc-role: Master
-              score: INFINITY
-            - type: colocation
-              rsc: nginx
-              with-rsc: virtual-ip
-              score: INFINITY
-            - type: colocation
-              rsc: coolapp
-              with-rsc: virtual-ip
-              score: INFINITY
-            - type: order
-              first: postgres
-              first-action: promote
-              then: virtual-ip
-              then-action: start
-              symmetrical: false
-              score: INFINITY
-            - type: order
-              first: postgres
-              first-action: demote
-              then: virtual-ip
-              then-action: stop
-              symmetrical: false
-              score: 0
 
 ## See also
 
 - [The official Pacemaker documentation](http://clusterlabs.org/doc/)
 
-## Copyright
+## License
 
-Copyright 2015-2019, Development Gateway. Licensed under GPL v3+.
+Licensed under GPL v3+.
